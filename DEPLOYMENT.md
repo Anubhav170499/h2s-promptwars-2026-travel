@@ -45,17 +45,22 @@ Render provides a completely free tier for hosting web services.
 
 ---
 
-### 3. Frontend Deployment on Vercel (Next.js)
-Vercel is the optimized hosting provider for Next.js, offering a 100% free Hobby tier.
-1. Sign up/log in to the [Vercel Dashboard](https://vercel.com/).
-2. Click **Add New > Project** and import your GitHub repository.
-3. Configure the project:
-   - **Framework Preset**: `Next.js`
+### 3. Frontend Deployment on Render (Web Service)
+Render provides a free Web Service tier that can run a Node.js next.js server.
+1. Sign up/log in to the [Render Dashboard](https://dashboard.render.com/).
+2. Click **New > Web Service**.
+3. Connect your GitHub repository.
+4. Apply the following settings:
+   - **Name**: `travelpilot-frontend`
+   - **Branch**: `main` (or your active branch)
+   - **Runtime**: `Node`
    - **Root Directory**: `frontend`
-   - **Build & Development Settings**: Keep defaults.
-4. Under the **Environment Variables** section, add:
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm run start`
+   - **Instance Type**: **Free**
+5. Under the **Variables** section, add the environment variable:
    - `NEXT_PUBLIC_API_URL`: The URL of your Render backend (e.g., `https://travelpilot-backend.onrender.com`). *Ensure there is no trailing slash.*
-5. Click **Deploy**. Vercel will build and host your Next.js frontend, providing a URL (e.g., `https://travelpilot-frontend.vercel.app`).
+6. Click **Create Web Service**. Wait for the build to finish. Render will provide a free URL (e.g., `https://travelpilot-frontend.onrender.com`).
 
 ---
 
