@@ -176,3 +176,16 @@ def test_invalid_requests_and_safety_checks(client: TestClient):
     }
     resp = client.post("/api/session/init", json=payload_invalid_budget)
     assert resp.status_code == 422
+
+def test_root_endpoint(client: TestClient):
+    """Verify that the root endpoint '/' returns a healthy status."""
+    response = client.get("/")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert data["service"] == "TravelPilot API"
+
+    # Verify that HEAD request to '/' also returns 200 OK
+    head_response = client.head("/")
+    assert head_response.status_code == 200
+

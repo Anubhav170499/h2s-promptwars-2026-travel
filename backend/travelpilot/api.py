@@ -54,6 +54,15 @@ def create_app() -> FastAPI:
     # Repository reference
     repo = get_repository()
 
+    @app.api_route("/", methods=["GET", "HEAD"])
+    async def root():
+        """Root endpoint for health checks and service status."""
+        return {
+            "status": "healthy",
+            "service": "TravelPilot API",
+            "version": "1.0.0"
+        }
+
     @app.get("/api/diagnostic-questions", response_model=List[DiagnosticQuestion])
     async def get_questions():
         """Retrieve cultural diagnostic baseline questions."""
