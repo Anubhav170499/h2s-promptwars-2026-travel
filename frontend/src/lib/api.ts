@@ -110,8 +110,12 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 export const api = {
-  async getDiagnosticQuestions(): Promise<DiagnosticQuestion[]> {
-    const res = await fetchWithTimeout(`${API_BASE}/api/diagnostic-questions`, {
+  async getDiagnosticQuestions(destination?: string): Promise<DiagnosticQuestion[]> {
+    let url = `${API_BASE}/api/diagnostic-questions`;
+    if (destination) {
+      url += `?destination=${encodeURIComponent(destination)}`;
+    }
+    const res = await fetchWithTimeout(url, {
       method: "GET",
       headers: getAuthHeaders(),
     });

@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { 
   api, TravelPreferences, DiagnosticAnswer, DiagnosticQuestion, 
-  SessionResponse, ChecklistItem, Activity 
+  SessionResponse, ChecklistItem 
 } from "../lib/api";
 import { 
   Sparkles, Compass, MapPin, DollarSign, Calendar, ListTodo, 
-  HelpCircle, RefreshCw, AlertTriangle, ArrowRight, User, Check, X, ShieldAlert
+  HelpCircle, RefreshCw, ArrowRight, User, X, ShieldAlert
 } from "lucide-react";
 
 export default function HomePage() {
@@ -39,7 +39,6 @@ export default function HomePage() {
 
   // Authentication simulation states
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [authToken, setAuthToken] = useState<string>("");
 
   // Substitution state
   const [substitutionModal, setSubstitutionModal] = useState<{
@@ -53,44 +52,13 @@ export default function HomePage() {
   // Active itinerary tab
   const [activeDay, setActiveDay] = useState<number>(1);
 
-  // Initialize: restore simulated authentication & check url session if persisted
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedToken = localStorage.getItem("tp_token");
-      if (savedToken) {
-        setAuthToken(savedToken);
-        setIsLoggedIn(true);
-      }
-      
-      const savedSessionId = localStorage.getItem("tp_session_id");
-      if (savedSessionId) {
-        loadSession(savedSessionId);
-      }
-    }
-  }, []);
-
-  const announce = (message: string) => {
+  const announce = useCallback((message: string) => {
     setAriaNotification(message);
     // Auto-clear after speaking
     setTimeout(() => setAriaNotification(""), 3000);
-  };
+  }, []);
 
-  const handleLoginToggle = () => {
-    if (isLoggedIn) {
-      localStorage.removeItem("tp_token");
-      setAuthToken("");
-      setIsLoggedIn(false);
-      announce("Switched to Guest session mode.");
-    } else {
-      const dummyToken = "tp_jwt_secret_verifier_token_example";
-      localStorage.setItem("tp_token", dummyToken);
-      setAuthToken(dummyToken);
-      setIsLoggedIn(true);
-      announce("Logged in as simulated registered user.");
-    }
-  };
-
-  const loadSession = async (id: string) => {
+  const loadSession = useCallback(async (id: string) => {
     setLoading(true);
     setLoadingMessage("Retrieving your active travel planner...");
     try {
@@ -99,11 +67,43 @@ export default function HomePage() {
       localStorage.setItem("tp_session_id", data.session_id);
       setErrorMessage(null);
       announce(`Travel plan for ${data.preferences.destination} loaded successfully.`);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
       localStorage.removeItem("tp_session_id");
     } finally {
       setLoading(false);
+    }
+  }, [announce]);
+
+  // Initialize: restore simulated authentication & check url session if persisted
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedToken = localStorage.getItem("tp_token");
+      if (savedToken) {
+        setTimeout(() => {
+          setIsLoggedIn(true);
+        }, 0);
+      }
+      
+      const savedSessionId = localStorage.getItem("tp_session_id");
+      if (savedSessionId) {
+        setTimeout(() => {
+          loadSession(savedSessionId);
+        }, 0);
+      }
+    }
+  }, [loadSession]);
+
+  const handleLoginToggle = () => {
+    if (isLoggedIn) {
+      localStorage.removeItem("tp_token");
+      setIsLoggedIn(false);
+      announce("Switched to Guest session mode.");
+    } else {
+      const dummyToken = "tp_jwt_secret_verifier_token_example";
+      localStorage.setItem("tp_token", dummyToken);
+      setIsLoggedIn(true);
+      announce("Logged in as simulated registered user.");
     }
   };
 
@@ -132,7 +132,7 @@ export default function HomePage() {
     setPreferences(updatedPrefs);
 
     try {
-      const fetchedQuestions = await api.getDiagnosticQuestions();
+      const fetchedQuestions = await api.getDiagnosticQuestions(updatedPrefs.destination);
       setQuestions(fetchedQuestions);
       
       // Initialize quiz answers structure
@@ -145,9 +145,10 @@ export default function HomePage() {
       setQuizStep(true);
       setErrorMessage(null);
       announce("Diagnostic questions loaded. Please complete the cultural baseline quiz.");
-    } catch (err: any) {
-      setErrorMessage(err.message || "Failed to load diagnostic questions.");
-      announce("Error: " + (err.message || "Failed to load diagnostic questions."));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load diagnostic questions.";
+      setErrorMessage(message);
+      announce("Error: " + message);
     } finally {
       setLoading(false);
     }
@@ -173,9 +174,10 @@ export default function HomePage() {
       setActiveDay(1);
       setErrorMessage(null);
       announce(`Travel planner initialized successfully for ${data.preferences.destination}.`);
-    } catch (err: any) {
-      setErrorMessage(err.message || "Failed to initialize travel planner.");
-      announce("Error: " + (err.message || "Failed to initialize travel planner."));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to initialize travel planner.";
+      setErrorMessage(message);
+      announce("Error: " + message);
     } finally {
       setLoading(false);
     }
@@ -192,8 +194,9 @@ export default function HomePage() {
       );
       setSession(updated);
       announce(`Marked task "${item.task}" as ${!item.is_completed ? 'completed' : 'incomplete'}.`);
-    } catch (err: any) {
-      setErrorMessage(err.message || "Failed to update task status.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update task status.";
+      setErrorMessage(message);
     }
   };
 
@@ -229,9 +232,10 @@ export default function HomePage() {
       setSubstitutionModal({ dayNumber: 1, activityName: "", show: false });
       setErrorMessage(null);
       announce(`Activity substituted successfully. Check the updated adaptation reason.`);
-    } catch (err: any) {
-      setErrorMessage(err.message || "Failed to substitute activity.");
-      announce("Error: " + (err.message || "Failed to substitute activity."));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to substitute activity.";
+      setErrorMessage(message);
+      announce("Error: " + message);
     } finally {
       setLoading(false);
     }
@@ -804,7 +808,7 @@ export default function HomePage() {
             </div>
             
             <p className="text-xs text-gray-400 mb-4 leading-relaxed">
-              Substitute activity <span className="text-white font-semibold">"{substitutionModal.activityName}"</span> on Day {substitutionModal.dayNumber} due to constraints.
+              Substitute activity <span className="text-white font-semibold">&ldquo;{substitutionModal.activityName}&rdquo;</span> on Day {substitutionModal.dayNumber} due to constraints.
             </p>
 
             <form onSubmit={handleSubstitutionSubmit} className="space-y-4">

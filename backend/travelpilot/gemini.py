@@ -6,10 +6,17 @@ from google import genai
 from google.genai import types
 from travelpilot import config
 from travelpilot.models import (
-    TravelPreferences, AdaptationResult, TripItinerary, ChecklistItem, BudgetFeasibility
+    TravelPreferences,
+    AdaptationResult,
+    TripItinerary,
+    ChecklistItem,
+    BudgetFeasibility,
+    DiagnosticQuestion,
 )
 from travelpilot.fallback import (
-    generate_fallback_itinerary, generate_fallback_checklist
+    generate_fallback_itinerary,
+    generate_fallback_checklist,
+    generate_fallback_questions,
 )
 from travelpilot.adaptive import check_budget_feasibility
 
@@ -30,9 +37,75 @@ SYSTEM_INSTRUCTION = (
     "or API details. You must strictly output JSON matching the requested response schema."
 )
 
-def generate_itinerary(
-    preferences: TravelPreferences,
-    adaptation: AdaptationResult
+
+# Wrapper model for structured Gemini response parsing (must be at module scope for Pydantic)
+class DiagnosticQuestionsWrap(BaseModel):
+    questions: List[DiagnosticQuestion]
+
+
+async def generate_diagnostic_questions(
+    destination: str,
+) -> List[DiagnosticQuestion]:
+    """Generate 3 destination-specific cultural etiquette diagnostic questions using Gemini.
+
+    Each question covers one of three topics: Greeting & Social Etiquette,
+    Dining & Food Customs, and Sacred Sites & Dress Code. Falls back to
+    universally appropriate static questions when Gemini is unavailable.
+    """
+    if not client:
+        logger.warning("Gemini Client not available. Generating fallback diagnostic questions.")
+        return generate_fallback_questions(destination)
+
+    prompt = (
+        f"Generate exactly 3 multiple-choice cultural etiquette diagnostic questions specifically for travelers visiting {destination}.\n\n"
+        f"Requirements:\n"
+        f"- Question 1 must cover local greeting and social etiquette norms specific to {destination}\n"
+        f"- Question 2 must cover dining customs and food etiquette specific to {destination}\n"
+        f"- Question 3 must cover dress code and behavioral rules for sacred, religious, or historically significant sites in {destination}\n\n"
+        f"For each question:\n"
+        f"- Provide exactly 3 answer options (one correct, two plausible but wrong distractors)\n"
+        f"- The correct option must reflect genuinely accurate local cultural practices\n"
+        f"- Set the 'correct_option' field to the exact text of the correct answer option\n"
+        f"- Use ids 'q1', 'q2', 'q3'\n"
+        f"- Assign topic labels: 'Greeting & Social Etiquette', 'Dining & Food Customs', 'Sacred Sites & Dress Code'\n"
+    )
+
+    try:
+        response = await client.aio.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                response_mime_type="application/json",
+                response_schema=DiagnosticQuestionsWrap,
+                temperature=0.3,
+            ),
+        )
+        data = json.loads(response.text)
+        questions = [DiagnosticQuestion(**q) for q in data.get("questions", [])]
+
+        # Validate we got exactly 3 questions with correct structure
+        if len(questions) != 3:
+            logger.warning(
+                f"Gemini returned {len(questions)} questions instead of 3. Falling back."
+            )
+            return generate_fallback_questions(destination)
+
+        for q in questions:
+            if q.correct_option not in q.options:
+                logger.warning(
+                    f"Gemini question {q.id} has correct_option not in options. Falling back."
+                )
+                return generate_fallback_questions(destination)
+
+        return questions
+    except Exception as e:
+        logger.error(f"Error generating diagnostic questions via Gemini: {e}. Falling back.")
+        return generate_fallback_questions(destination)
+
+
+async def generate_itinerary(
+    preferences: TravelPreferences, adaptation: AdaptationResult
 ) -> TripItinerary:
     if not client:
         logger.warning("Gemini Client not available. Generating fallback itinerary.")
@@ -56,15 +129,15 @@ def generate_itinerary(
     )
 
     try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
+        response = await client.aio.models.generate_content(
+            model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
                 response_mime_type="application/json",
                 response_schema=TripItinerary,
-                temperature=0.2
-            )
+                temperature=0.2,
+            ),
         )
         # Parse the structured JSON response
         data = json.loads(response.text)
@@ -73,9 +146,9 @@ def generate_itinerary(
         logger.error(f"Error generating itinerary via Gemini: {e}. Falling back.")
         return generate_fallback_itinerary(preferences, adaptation)
 
-def generate_checklist(
-    preferences: TravelPreferences,
-    adaptation: AdaptationResult
+
+async def generate_checklist(
+    preferences: TravelPreferences, adaptation: AdaptationResult
 ) -> List[ChecklistItem]:
     if not client:
         logger.warning("Gemini Client not available. Generating fallback checklist.")
@@ -97,17 +170,16 @@ def generate_checklist(
     class ChecklistWrap(BaseModel):
         items: List[ChecklistItem]
 
-
     try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
+        response = await client.aio.models.generate_content(
+            model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
                 response_mime_type="application/json",
                 response_schema=ChecklistWrap,
-                temperature=0.2
-            )
+                temperature=0.2,
+            ),
         )
         data = json.loads(response.text)
         return [ChecklistItem(**item) for item in data.get("items", [])]
@@ -115,9 +187,9 @@ def generate_checklist(
         logger.error(f"Error generating checklist via Gemini: {e}. Falling back.")
         return generate_fallback_checklist(preferences, adaptation)
 
-def evaluate_budget_feasibility(
-    preferences: TravelPreferences,
-    itinerary: TripItinerary
+
+async def evaluate_budget_feasibility(
+    preferences: TravelPreferences, itinerary: TripItinerary
 ) -> BudgetFeasibility:
     # First calculate actual cost sum
     total_est_cost = 0.0
@@ -138,20 +210,22 @@ def evaluate_budget_feasibility(
     )
 
     try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
+        response = await client.aio.models.generate_content(
+            model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
                 response_mime_type="application/json",
                 response_schema=BudgetFeasibility,
-                temperature=0.2
-            )
+                temperature=0.2,
+            ),
         )
         data = json.loads(response.text)
         # Ensure estimated total matches our actual computed activity sum for mathematical accuracy
         data["estimated_total_cost"] = total_est_cost
         return BudgetFeasibility(**data)
     except Exception as e:
-        logger.error(f"Error checking budget feasibility via Gemini: {e}. Falling back.")
+        logger.error(
+            f"Error checking budget feasibility via Gemini: {e}. Falling back."
+        )
         return check_budget_feasibility(preferences, total_est_cost)
