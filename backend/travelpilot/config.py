@@ -6,7 +6,7 @@ GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
 # Firestore configuration
 USE_FIRESTORE: bool = os.getenv("USE_FIRESTORE", "false").lower() == "true"
-FIREBASE_PROJECT_ID: str = os.getenv("FIREBASE_PROJECT_ID", "")
+FIREBASE_PROJECT_ID: str = os.getenv("FIREBASE_PROJECT_ID", "h2s-promptwars-travel")
 
 # Logging & Monitoring
 ENABLE_CLOUD_LOGGING: bool = os.getenv("ENABLE_CLOUD_LOGGING", "false").lower() == "true"
